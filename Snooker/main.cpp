@@ -2,41 +2,118 @@
 #include <cmath>
 #include <iostream>
 
-bool isColorAtPosition(const sf::Image& image, const sf::Vector2f& position, const sf::Color& color) {
-    if (position.x >= 0 && position.x < image.getSize().x && position.y >= 0 && position.y < image.getSize().y) {
-        return image.getPixel(static_cast<unsigned int>(position.x), static_cast<unsigned int>(position.y)) == color;
-    }
-    return false;
+bool checkCollision(sf::CircleShape& ball1, sf::CircleShape& ball2) {
+    sf::Vector2f delta = ball1.getPosition() - ball2.getPosition();
+    float distanceSquared = delta.x * delta.x + delta.y * delta.y;
+    float radiusSquared = (ball1.getRadius() + ball2.getRadius()) * (ball1.getRadius() + ball2.getRadius());
+    return distanceSquared <= radiusSquared;
+}
+
+sf::Vector2f getNormalVector(const sf::Vector2f& p1, const sf::Vector2f& p2) {
+    sf::Vector2f normal = p2 - p1;
+    float length = sqrt(normal.x * normal.x + normal.y * normal.y);
+    return sf::Vector2f(-normal.y / length, normal.x / length); // Normalizacja wektora
+}
+
+// Funkcja do aktualizacji prędkości po kolizji zgodnie z fizyką
+void handleCollision(sf::CircleShape& ball1, sf::CircleShape& ball2) {
+    sf::Vector2f vel1 = ball1.getPosition() - ball2.getPosition();
+    sf::Vector2f vel2 = ball2.getPosition() - ball1.getPosition();
+    float distance = sqrt(vel1.x * vel1.x + vel1.y * vel1.y);
+    vel1 /= distance;
+    vel2 /= distance;
+
+    float dot1 = vel1.x * ball1.getRadius() + vel1.y * ball1.getRadius();
+    float dot2 = vel2.x * ball2.getRadius() + vel2.y * ball2.getRadius();
+
+    sf::Vector2f newVel1 = vel1 * dot1 + vel2 * dot2;
+    sf::Vector2f newVel2 = vel1 * dot2 + vel2 * dot1;
+
+    ball1.setPosition(ball2.getPosition() + newVel1);
+    ball2.setPosition(ball1.getPosition() + newVel2);
 }
 
 int main() {
-    sf::RenderWindow window(sf::VideoMode(1500, 750), "SFML Texture Drawing");
+    sf::RenderWindow window(sf::VideoMode(1500, 750), "Snooker");
 
-    sf::Texture texture;
-    if (!texture.loadFromFile("textures/Table.png")) {
-        // Handle error if the image fails to load
-        return EXIT_FAILURE;
+    sf::Texture table;
+    if (!table.loadFromFile("textures/Table.png")) {
+        return 0;
     }
-    sf::Image textureTable;
-    if (!texture.loadFromFile("textures/Table.png")) {
-        // Handle error if the image fails to load
-        return EXIT_FAILURE;
+    sf::Texture coll_table;
+    if(!coll_table.loadFromFile("textures/collision_table.png")){
+        return 0;
     }
+    // Tworzenie wektora bil
+    std::vector<sf::CircleShape> bilardoweKule;
+
+    // Dodawanie 15 czerwonych kul
+    for (int i = 0; i < 15; ++i) {
+        sf::CircleShape kula(16);
+        kula.setFillColor(sf::Color (255, 0, 0));
+        bilardoweKule.push_back(kula);
+    }
+
+    // Dodawanie pozosta³ych kul
+    sf::CircleShape kula(16);
+    kula.setFillColor(sf::Color (0, 0, 0));
+    bilardoweKule.push_back(kula);
+
+    kula.setFillColor(sf::Color (0, 0, 255));
+    bilardoweKule.push_back(kula);
+
+    kula.setFillColor(sf::Color (165, 42, 42));
+    bilardoweKule.push_back(kula);
+
+    kula.setFillColor(sf::Color (255, 192, 203));
+    bilardoweKule.push_back(kula);
+
+    kula.setFillColor(sf::Color (255, 255, 0));
+    bilardoweKule.push_back(kula);
+
+    kula.setFillColor(sf::Color (0, 128, 0));
+    bilardoweKule.push_back(kula);
+
+    //Ustawianie pozycji bil
+    int x = 966;
+    int y = 367;
+    int limit = 1;
+    int licznik = 0;
+    for (int i = 0; i < 15; i++) {
+        bilardoweKule[i].setPosition(x, y);
+        licznik++;
+        std::cout<<x<<"  "<<y<<std::endl;
+        if (licznik == limit){
+            x+=29;
+            y-=((17+(limit-1)*34));
+            licznik = 0;
+            limit++;
+        } else {
+            y+=34;
+        }
+    }
+    bilardoweKule[15].setPosition(x+40,367);
+    bilardoweKule[16].setPosition(742,367);
+    bilardoweKule[17].setPosition(500,367);
+    bilardoweKule[18].setPosition(932,367);
+    bilardoweKule[19].setPosition(500,447);
+    bilardoweKule[20].setPosition(500,287);
+    bilardoweKule[21].setPosition(500,500);
 
     sf::Sprite sprite;
-    sprite.setTexture(texture);
+    sprite.setTexture(table);
 
-    sf::CircleShape WhiteBall(20); // Create a WhiteBall with a radius of 15 pixels
-    WhiteBall.setFillColor(sf::Color::White); // Set color of the WhiteBall
-    WhiteBall.setPosition(450, 355); // Example position for the center of the window
+    sf::CircleShape WhiteBall(16);
+    WhiteBall.setFillColor(sf::Color::White);
+    WhiteBall.setPosition(460, 410);
 
-    sf::Vector2f WhiteBallVelocity(0, 0); // Initial velocity set to (0, 0)
+    sf::Vector2f WhiteBallVelocity(0, 0);
     const float acceleration = 5.f;
-    const float friction = 0.001f; // Friction factor for reducing velocity
+    const float friction = 0.001f;
     bool isMoving = false;
     sf::Vector2f startPos;
 
-    sf::Clock clock; // SFML clock to control the update rate
+    sf::Clock clock;
     float deltaTime = 0.0f;
 
 
@@ -57,53 +134,37 @@ int main() {
                     sf::Vector2f direction = startPos - endPos;
                     float power = std::min(10.0f, std::sqrt(direction.x * direction.x + direction.y * direction.y));
 
-                    // Apply force to the white WhiteBall based on 'direction' and 'power'
-                    // Adjust WhiteBall velocity or add force here
-                    WhiteBallVelocity = direction * power * 0.1f; // Adjust multiplier for suitable speed
+                    WhiteBallVelocity = direction * power * 0.1f;
 
-                    isMoving = false; // Reset the movement flag
+                    isMoving = false;
                 }
             }
 
         }
-
-          // Calculate deltaTime to update at a fixed frame rate
+        for (size_t i = 0; i < bilardoweKule.size(); ++i) {
+            if (&WhiteBall != &bilardoweKule[i] && checkCollision(WhiteBall, bilardoweKule[i])) {
+                handleCollision(WhiteBall, bilardoweKule[i]);
+            }
+        }
         deltaTime += clock.restart().asSeconds();
-
-        // Update ball position based on deltaTime
-        while (deltaTime >= 1.0f / 30.0f) { // Update at 30fps
-            // Update ball's velocity or apply forces here if needed
+        while (deltaTime >= 1.0f / 30.0f) {
             WhiteBall.move(WhiteBallVelocity*deltaTime*acceleration);
             deltaTime -= 1.0f / 30.0f;
         }
-        WhiteBallVelocity = WhiteBallVelocity - WhiteBallVelocity*friction; // Apply friction to reduce velocity gradually
-         // If the velocity is very small, stop the ball completely
+        WhiteBallVelocity = WhiteBallVelocity - WhiteBallVelocity*friction;
         if (std::abs(WhiteBallVelocity.x) < 0.001f && std::abs(WhiteBallVelocity.y) < 0.001f) {
             WhiteBallVelocity = sf::Vector2f(0.0f, 0.0f);
         }
 
-
-        // Collision detection based on color
-        sf::Vector2f ballPosition = WhiteBall.getPosition();
-        sf::Color collisionColor(99, 220, 99);
-
-        if (isColorAtPosition(textureTable, ballPosition, collisionColor)) {
-            std::cout << "Collision detected at position: (" << ballPosition.x << ", " << ballPosition.y << ")" << std::endl;
-            // Handle collision with the specified color here
-            // Example: Invert the ball's velocity for a bounce effect
-            WhiteBallVelocity.x *= -1;
-            WhiteBallVelocity.y *= -1;
-        }
-        sf::Color pixelColor = textureTable.getPixel(static_cast<unsigned int>(ballPosition.x), static_cast<unsigned int>(ballPosition.y));
-        std::cout << "Pixel color at position: R=" << static_cast<int>(pixelColor.r) << " G=" << static_cast<int>(pixelColor.g) << " B=" << static_cast<int>(pixelColor.b) << std::endl;
-
-
         window.clear();
         window.draw(sprite);
+        for (auto& k : bilardoweKule) {
+            window.draw(k);
+        }
         window.draw(WhiteBall);
 
         window.display(); // Display the drawn sprite
     }
 
-    return EXIT_SUCCESS;
+    return 0;
 }
